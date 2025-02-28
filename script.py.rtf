@@ -1,0 +1,91 @@
+{\rtf1\ansi\ansicpg1251\cocoartf2639
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\froman\fcharset0 Times-Roman;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs24 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 from flask import Flask, request, jsonify\
+import requests\
+import gspread\
+from oauth2client.service_account import ServiceAccountCredentials\
+import smtplib\
+from email.mime.text import MIMEText\
+from twilio.rest import Client\
+\
+app = Flask(__name__)\
+\
+# Google Sheets API Setup\
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]\
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)\
+client = gspread.authorize(creds)\
+sheet = client.open("Boxing Club Leads").sheet1\
+\
+# Telegram Bot Token\
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"\
+TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"\
+\
+# Email Config\
+SMTP_SERVER = "smtp.gmail.com"\
+SMTP_PORT = 587\
+EMAIL_USER = "your_email@gmail.com"\
+EMAIL_PASSWORD = "your_password"\
+\
+# Twilio WhatsApp API\
+TWILIO_ACCOUNT_SID = "YOUR_TWILIO_SID"\
+TWILIO_AUTH_TOKEN = "YOUR_TWILIO_AUTH_TOKEN"\
+TWILIO_WHATSAPP_NUMBER = "whatsapp:+YOUR_TWILIO_NUMBER"\
+\
+def send_telegram_message(message):\
+    url = f"https://api.telegram.org/bot\{TELEGRAM_BOT_TOKEN\}/sendMessage"\
+    payload = \{"chat_id": TELEGRAM_CHAT_ID, "text": message\}\
+    requests.post(url, json=payload)\
+\
+def send_email(to_email, subject, message):\
+    msg = MIMEText(message)\
+    msg["Subject"] = subject\
+    msg["From"] = EMAIL_USER\
+    msg["To"] = to_email\
+    \
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)\
+    server.starttls()\
+    server.login(EMAIL_USER, EMAIL_PASSWORD)\
+    server.sendmail(EMAIL_USER, to_email, msg.as_string())\
+    server.quit()\
+\
+def send_whatsapp_message(to_number, message):\
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)\
+    client.messages.create(\
+        from_=TWILIO_WHATSAPP_NUMBER,\
+        body=message,\
+        to=f"whatsapp:\{to_number\}"\
+    )\
+\
+@app.route("/new_lead", methods=["POST"])\
+def new_lead():\
+    data = request.json\
+    name = data.get("name")\
+    phone = data.get("phone")\
+    email = data.get("email")\
+    city = data.get("city")\
+    training_type = data.get("training_type")\
+    \
+    # Save to Google Sheets\
+    sheet.append_row([name, phone, email, city, training_type])\
+    \
+    # Send Telegram Notification\
+    send_telegram_message(f"\uc0\u1053 \u1086 \u1074 \u1072 \u1103  \u1079 \u1072 \u1103 \u1074 \u1082 \u1072 : \{name\}, \{phone\}, \{email\}, \u1043 \u1086 \u1088 \u1086 \u1076 : \{city\}, \u1058 \u1088 \u1077 \u1085 \u1080 \u1088 \u1086 \u1074 \u1082 \u1072 : \{training_type\}")\
+    \
+    # Send Auto Email\
+    send_email(email, "\uc0\u1044 \u1086 \u1073 \u1088 \u1086  \u1087 \u1086 \u1078 \u1072 \u1083 \u1086 \u1074 \u1072 \u1090 \u1100  \u1074  \u1085 \u1072 \u1096  \u1073 \u1086 \u1082 \u1089 \u1077 \u1088 \u1089 \u1082 \u1080 \u1081  \u1082 \u1083 \u1091 \u1073 !", f"\u1057 \u1087 \u1072 \u1089 \u1080 \u1073 \u1086  \u1079 \u1072  \u1074 \u1072 \u1096 \u1091  \u1079 \u1072 \u1103 \u1074 \u1082 \u1091 ! \u1043 \u1086 \u1088 \u1086 \u1076 : \{city\}, \u1058 \u1080 \u1087  \u1090 \u1088 \u1077 \u1085 \u1080 \u1088 \u1086 \u1074 \u1082 \u1080 : \{training_type\}.")\
+    \
+    # Send WhatsApp Message\
+    send_whatsapp_message(phone, f"\uc0\u1057 \u1087 \u1072 \u1089 \u1080 \u1073 \u1086  \u1079 \u1072  \u1074 \u1072 \u1096 \u1091  \u1079 \u1072 \u1103 \u1074 \u1082 \u1091 ! \u1043 \u1086 \u1088 \u1086 \u1076 : \{city\}, \u1058 \u1088 \u1077 \u1085 \u1080 \u1088 \u1086 \u1074 \u1082 \u1072 : \{training_type\}. \u1052 \u1099  \u1089 \u1074 \u1103 \u1078 \u1077 \u1084 \u1089 \u1103  \u1089  \u1074 \u1072 \u1084 \u1080  \u1074  \u1073 \u1083 \u1080 \u1078 \u1072 \u1081 \u1096 \u1077 \u1077  \u1074 \u1088 \u1077 \u1084 \u1103 .")\
+    \
+    return jsonify(\{"status": "success"\})\
+\
+if __name__ == "__main__":\
+    app.run(host="0.0.0.0", port=5000)\
+}
